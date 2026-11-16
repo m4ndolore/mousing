@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+*.log
+__pycache__/
+.DS_Store
+
+# Your deployment's own config; copy it from the matching *.example.toml.
+/wrangler.toml
+/src/cron/wrangler.toml
+
+# Baseline data built from RopeDrop Planner and Queue-Times goes to KV, not git.
+data/
