@@ -1,7 +1,7 @@
 {
   "name": "mousing",
   "version": "0.1.0",
-  "description": "Live Lightning Lane return times, park crowd trends and seasonal hunts for Walt Disney World, on Cloudflare's free plan.",
+  "description": "Live Lightning Lane return times, park crowd trends and a pumpkin finder for Walt Disney World, on Cloudflare's free plan.",
   "type": "module",
   "scripts": {
     "test": "node --test",

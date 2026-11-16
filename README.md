@@ -1,7 +1,7 @@
 # mousing
 
-Live Lightning Lane return times, park crowd trends and seasonal hunts for Walt
-Disney World. It runs on Cloudflare's free plan and installs on a phone as a
+Live Lightning Lane return times, park crowd trends and a pumpkin finder for
+Walt Disney World. It runs on Cloudflare's free plan and installs on a phone as a
 web app.
 
 **Demo:** https://mousing.pages.dev (read-only: live data, no alerts)
@@ -19,8 +19,8 @@ web app.
   times and rides that usually sell out.
 - **Seasonal outlook.** Whether this month and weekday usually run busier or
   quieter than each park's average.
-- **Hunts.** A checklist and map for the fall 2026 EPCOT pumpkin hunt. Progress
-  stays on your phone.
+- **🎃 Finder.** A checklist and map for the fall 2026 EPCOT pumpkin hunt, at
+  `/finder`. Progress stays on your phone.
 
 ## Run your own copy
 

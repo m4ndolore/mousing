@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>🎃 Finder - mousing</title>
+  <meta name="description" content="Checklist and map for the fall 2026 EPCOT pumpkin hunt. Progress stays on your phone.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.json">
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="/assets/styles.css" rel="stylesheet">
+  <style>
+    /* Light schematic map in the same greys and blues as the rest of mousing. */
+    :root {
+      --lawn: #e8f3eb;
+      --lagoon: #bfdbfe;
+      --lagoon-2: #93c5fd;
+      --path: #e5e7eb;
+      --bldg: #eef2ff;
+      --bldg-edge: #a5b4fc;
+      --label: #4b5563;
+      --pin: #ea580c;
+      --pin-found: #16a34a;
+      --you: #2563eb;
+    }
+    [hidden] { display: none !important; }
+    #confetti-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+    #map svg { display: block; width: 100%; height: auto; touch-action: manipulation; }
+    .pin { cursor: pointer; }
+    .pin:focus { outline: none; }
+    .pin:focus-visible circle.pin-dot { stroke: #111827; stroke-width: 3; }
+    .zone-label { fill: var(--label); font: 700 10px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+    .pin-num { font: 800 11px system-ui, sans-serif; pointer-events: none; }
+    .bottom-bar { padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); }
+    .sheet-panel { padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); transition: transform .25s ease; }
+    .fade { transition: opacity .25s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      .sheet-panel, .fade, #progress-bar { transition: none !important; }
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+
+  <header class="sticky top-0 z-50 bg-white border-b border-gray-200">
+    <div class="max-w-5xl mx-auto px-4">
+      <div class="h-12 flex items-center justify-between">
+        <a href="/" class="text-lg font-bold text-gray-900 tracking-tight">mousing</a>
+      </div>
+      <nav class="grid grid-cols-2 gap-1 p-1 mb-2 bg-gray-100 rounded-lg text-sm font-medium sm:max-w-xs" aria-label="Pages">
+        <a href="/" class="py-1.5 text-center rounded-md text-gray-600 hover:text-gray-900">Lightning Lane</a>
+        <a href="/finder" aria-current="page" class="py-1.5 text-center rounded-md bg-white text-gray-900 shadow-sm">🎃 Finder</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6 space-y-4 pb-32">
+
+    <section class="bg-white rounded-xl border border-gray-100 p-5" aria-labelledby="hunt-title">
+      <h1 id="hunt-title" class="text-base font-semibold text-gray-900">Pluto's Pumpkin Pursuit · EPCOT</h1>
+      <p class="text-xs text-gray-400 mt-0.5">Locations from the fall 2026 board. Check this season's board in the park. Progress stays on this phone.</p>
+
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div class="inline-flex rounded-lg border border-gray-200 overflow-hidden" role="group" aria-label="View">
+          <button id="tab-list" type="button" class="px-3 py-1.5 text-xs font-medium transition-colors" onclick="setView('list')">Checklist</button>
+          <button id="tab-map" type="button" class="px-3 py-1.5 text-xs font-medium transition-colors" onclick="setView('map')">Map</button>
+        </div>
+        <button id="clear-here" type="button" class="text-xs text-gray-500 underline" onclick="setHere(null)" hidden>Clear my spot</button>
+      </div>
+
+      <div class="mt-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">I'm near</p>
+        <div id="zone-chips" class="mt-2 flex flex-wrap gap-1.5"></div>
+        <p id="here-hint" class="text-xs text-gray-500 mt-2"></p>
+      </div>
+    </section>
+
+    <!-- Map view -->
+    <section id="view-map" class="bg-white rounded-xl border border-gray-100 p-5 space-y-3" hidden aria-label="Map">
+      <div id="map" class="max-w-lg mx-auto rounded-lg overflow-hidden border border-gray-200"></div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full inline-block" style="background:var(--pin)"></span>To find</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full inline-block" style="background:var(--pin-found)"></span>Found</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full inline-block border-2 border-dashed border-yellow-500"></span>Nearest 3</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full inline-block" style="background:var(--you)"></span>You</span>
+      </div>
+      <p class="text-xs text-gray-400">Not to scale. Pins mark the attraction, shop or eatery named on the board. The pumpkin is at or around it, often above eye level.</p>
+      <div id="map-detail" class="border border-gray-100 rounded-lg p-4" hidden></div>
+    </section>
+
+    <!-- Checklist view -->
+    <section id="view-list" class="bg-white rounded-xl border border-gray-100 p-5" aria-label="Checklist">
+      <p class="text-xs text-gray-500" id="list-caption"></p>
+      <div id="checklist-container" class="mt-2 divide-y divide-gray-50"></div>
+      <div class="mt-4 text-center">
+        <button id="reset-btn" type="button" class="text-xs text-gray-500 underline" onclick="askReset()">Reset my progress</button>
+        <div id="reset-confirm" class="border border-red-200 bg-red-50 rounded-lg p-4" hidden>
+          <p class="text-sm font-medium text-red-800 mb-3">Clear all 12 locations on this phone?</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" class="py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg" onclick="cancelReset()">Keep them</button>
+            <button type="button" class="py-2 text-sm font-medium text-white bg-red-600 rounded-lg" onclick="doReset()">Reset</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-xl border border-gray-100 p-5 text-sm text-gray-600">
+      <h2 class="text-sm font-semibold text-gray-900">Redeem your board</h2>
+      <p class="mt-1">Creations Shop, Disney Traders, Gateway Gifts, or World Traveler at International Gateway. You can redeem it even if you didn't find every pumpkin.</p>
+    </section>
+
+    <footer class="pt-2 text-center text-xs text-gray-400">
+      <p>Unofficial fan project. Not affiliated with or endorsed by Disney.</p>
+    </footer>
+  </main>
+
+  <div class="bottom-bar fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 px-4 pt-3 z-30">
+    <div class="max-w-5xl mx-auto">
+      <div class="flex justify-between items-baseline">
+        <span class="text-sm font-medium text-gray-700">Pumpkins found</span>
+        <span id="progress-text" class="text-sm font-semibold text-gray-900" style="font-variant-numeric: tabular-nums">0 / 12</span>
+      </div>
+      <div class="mt-1.5 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+        <div id="progress-bar" class="h-full rounded-full" style="width:0%; background:var(--pin); transition: width .4s ease"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="completion-modal" class="fade fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-6" style="opacity:0" hidden>
+    <div class="bg-white rounded-xl p-6 max-w-sm w-full text-center shadow-xl" role="dialog" aria-modal="true" aria-labelledby="done-title">
+      <h2 id="done-title" class="text-lg font-semibold text-gray-900">🎃 All 12 found</h2>
+      <p class="mt-2 text-sm text-gray-600">Redeem your board at Creations Shop, Disney Traders, Gateway Gifts or World Traveler.</p>
+      <button type="button" onclick="closeCompletion()" class="mt-5 w-full py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Done</button>
+    </div>
+  </div>
+
+  <!-- Found sheet -->
+  <div id="sheet" class="fade fixed inset-0 bg-black bg-opacity-40 z-50 flex items-end sm:items-center justify-center" style="opacity:0" hidden>
+    <div id="sheet-content" class="sheet-panel bg-white rounded-t-xl sm:rounded-xl p-5 w-full max-w-md space-y-3 shadow-xl" style="transform:translateY(100%)" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="flex justify-between items-start gap-3">
+        <div class="min-w-0">
+          <h2 id="sheet-title" class="text-base font-semibold text-gray-900">Spotted it?</h2>
+          <p class="text-sm text-gray-500 mt-0.5" id="sheet-subtitle"></p>
+        </div>
+        <button type="button" onclick="closeSheet()" aria-label="Close" class="p-1 text-gray-400 hover:text-gray-700 rounded-md">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <label for="sheet-note" class="block text-xs text-gray-500">Which character pumpkin? (optional)</label>
+      <input id="sheet-note" type="text" maxlength="60" placeholder="e.g. Figment, up on the sign" class="w-full px-3 py-2 text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button id="sheet-found" type="button" class="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Found it</button>
+      <button id="sheet-unfound" type="button" class="w-full py-2.5 text-sm font-medium text-red-600 bg-white border border-gray-200 rounded-lg">Mark not found</button>
+    </div>
+  </div>
+
+  <canvas id="confetti-canvas"></canvas>
+
+<script>
+  // ---------- Data ----------
+  // Names come from the 2026 EPCOT game board. x/y place each pin on the schematic map (viewBox 360 x 470):
+  // top = World Showcase lagoon, bottom = main entrance. Left = World Discovery (Test Track side), right = World Nature.
+  const locations = [
+    { name: "Disney Traders",                          zone: "showcase",    x: 228, y: 208 },
+    { name: "The Odyssey",                             zone: "discovery",   x: 96,  y: 196 },
+    { name: "Green Landing Family Play Zone",          zone: "discovery",   x: 112, y: 262 },
+    { name: "Connections Eatery",                      zone: "celebration", x: 214, y: 300 },
+    { name: "Test Track",                              zone: "discovery",   x: 48,  y: 300 },
+    { name: "Guardians of the Galaxy: Cosmic Rewind",  zone: "discovery",   x: 70,  y: 392 },
+    { name: "Port of Entry",                           zone: "showcase",    x: 132, y: 208 },
+    { name: "Swirled Showcase",                        zone: "showcase",    x: 180, y: 222 },
+    { name: "Journey Into Imagination with Figment",   zone: "nature",      x: 262, y: 262 },
+    { name: "Creations Shop",                          zone: "celebration", x: 146, y: 300 },
+    { name: "The Seas with Nemo & Friends",            zone: "nature",      x: 312, y: 360 },
+    { name: "The Land Pavilion",                       zone: "nature",      x: 312, y: 286 }
+  ];
+
+  const zones = [
+    { id: "showcase",    label: "Showcase Plaza",    x: 180, y: 210 },
+    { id: "discovery",   label: "World Discovery",   x: 70,  y: 300 },
+    { id: "celebration", label: "World Celebration", x: 180, y: 310 },
+    { id: "nature",      label: "World Nature",      x: 295, y: 300 },
+    { id: "entrance",    label: "Main Entrance",     x: 180, y: 445 }
+  ];
+
+  // ---------- Storage (per-device) ----------
+  const KEY = 'epcotPumpkinHunt2026';
+  const UI_KEY = 'epcotPumpkinHuntUI2026';
+  function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch (e) { return fallback; } }
+  function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+  // state[i] = { found: true, note: "..." }
+  let state = load(KEY, {});
+  let ui = load(UI_KEY, { view: 'list', here: null });
+  let sheetIndex = null;
+  let selectedPin = null;
+  let celebrated = false;
+
+  const $ = id => document.getElementById(id);
+  const isFound = i => !!(state[i] && state[i].found);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const zoneLabel = id => zones.find(z => z.id === id).label;
+  const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- Distance helpers ----------
+  function dist(i) {
+    if (!ui.here) return 0;
+    const l = locations[i];
+    return Math.hypot(l.x - ui.here.x, l.y - ui.here.y);
+  }
+  function nearness(d) {
+    if (d < 70) return { text: "Very close", cls: "text-green-700" };
+    if (d < 150) return { text: "Short walk", cls: "text-yellow-700" };
+    return { text: "Far side", cls: "text-gray-400" };
+  }
+  function nearestUnfound(n) {
+    if (!ui.here) return [];
+    return locations.map((_, i) => i).filter(i => !isFound(i)).sort((a, b) => dist(a) - dist(b)).slice(0, n);
+  }
+
+  // ---------- View switching ----------
+  const TOGGLE_BASE = 'px-3 py-1.5 text-xs font-medium transition-colors';
+  function setView(v) {
+    ui.view = v; save(UI_KEY, ui);
+    $('view-list').hidden = v !== 'list';
+    $('view-map').hidden = v !== 'map';
+    $('tab-list').className = `${TOGGLE_BASE} ${v === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`;
+    $('tab-map').className  = `${TOGGLE_BASE} ${v === 'map' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'}`;
+    $('tab-list').setAttribute('aria-pressed', v === 'list');
+    $('tab-map').setAttribute('aria-pressed', v === 'map');
+  }
+
+  function setHere(here) { ui.here = here; save(UI_KEY, ui); renderAll(); }
+
+  function renderZoneChips() {
+    const wrap = $('zone-chips');
+    wrap.innerHTML = '';
+    zones.forEach(z => {
+      const active = ui.here && ui.here.zone === z.id;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `px-3 py-1 text-xs font-medium rounded-full border transition-colors ${active ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300'}`;
+      b.setAttribute('aria-pressed', active);
+      b.textContent = z.label;
+      b.onclick = () => setHere({ x: z.x, y: z.y, zone: z.id });
+      wrap.appendChild(b);
+    });
+    $('clear-here').hidden = !ui.here;
+    const near = nearestUnfound(1)[0];
+    $('here-hint').textContent = ui.here
+      ? (near !== undefined ? `Closest one left: #${near + 1} ${locations[near].name}` : 'Nothing left to find.')
+      : 'Pick an area, or tap the map, to sort the hunt nearest first.';
+  }
+
+  // ---------- List ----------
+  function renderList() {
+    const container = $('checklist-container');
+    container.innerHTML = '';
+    const order = locations.map((_, i) => i);
+    if (ui.here) order.sort((a, b) => (isFound(a) - isFound(b)) || (dist(a) - dist(b)));
+    $('list-caption').textContent = ui.here ? 'Nearest first. Found ones drop to the bottom.' : 'Tap a location when you spot its pumpkin.';
+
+    order.forEach(index => {
+      const loc = locations[index];
+      const checked = isFound(index);
+      const note = checked ? (state[index].note || '') : '';
+      const nr = ui.here && !checked ? nearness(dist(index)) : null;
+
+      const item = document.createElement('div');
+      item.className = 'py-3 -mx-2 px-2 flex items-start gap-3 rounded-md cursor-pointer hover:bg-gray-50 active:bg-gray-100';
+      item.setAttribute('role', 'button');
+      item.tabIndex = 0;
+      item.onclick = () => openSheet(index);
+      item.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSheet(index); } };
+      item.innerHTML = `
+        <span class="mt-0.5 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${checked ? 'text-white' : 'border-2'}"
+          style="${checked ? 'background:var(--pin-found)' : 'border-color:var(--pin);color:var(--pin)'}">
+          ${checked ? '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' : index + 1}
+        </span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-sm ${checked ? 'text-gray-400 line-through' : 'text-gray-900'}">${loc.name}</span>
+          <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
+            <span class="text-gray-400">${zoneLabel(loc.zone)}</span>
+            ${nr ? `<span class="${nr.cls}">· ${nr.text}</span>` : ''}
+            <button type="button" class="text-blue-600 underline" data-map="${index}">Show on map</button>
+          </span>
+          ${note ? `<span class="mt-1 block text-xs text-gray-600">🎃 ${esc(note)}</span>` : ''}
+        </span>`;
+      item.querySelector('[data-map]').onclick = e => { e.stopPropagation(); selectedPin = index; setView('map'); renderMap(); window.scrollTo({ top: 0 }); };
+      container.appendChild(item);
+    });
+  }
+
+  // ---------- Map ----------
+  function renderMap() {
+    const near = nearestUnfound(3);
+    const pins = locations.map((l, i) => {
+      const found = isFound(i);
+      return `
+        <g class="pin" tabindex="0" role="button" aria-label="#${i + 1} ${esc(l.name)}${found ? ' (found)' : ''}" data-pin="${i}" transform="translate(${l.x} ${l.y})">
+          ${near.includes(i) ? '<circle r="16" fill="none" stroke="#eab308" stroke-width="2.5" stroke-dasharray="4 3"/>' : ''}
+          ${selectedPin === i ? '<circle r="18" fill="#11182714" stroke="#111827" stroke-width="1.5"/>' : ''}
+          <circle class="pin-dot" r="11" fill="${found ? 'var(--pin-found)' : 'var(--pin)'}" stroke="#ffffff" stroke-width="2"/>
+          <text class="pin-num" text-anchor="middle" dy="4" fill="#ffffff">${found ? '✓' : i + 1}</text>
+        </g>`;
+    }).join('');
+
+    const you = ui.here ? `
+      <g transform="translate(${ui.here.x} ${ui.here.y})" pointer-events="none">
+        <circle r="20" fill="var(--you)" opacity=".15"/>
+        <circle r="7" fill="var(--you)" stroke="#fff" stroke-width="2.5"/>
+      </g>` : '';
+
+    $('map').innerHTML = `
+      <svg viewBox="0 0 360 470" role="img" aria-label="Schematic map of EPCOT with pumpkin location pins">
+        <rect x="0" y="0" width="360" height="470" fill="var(--lawn)"/>
+        <ellipse cx="180" cy="104" rx="168" ry="98" fill="none" stroke="var(--path)" stroke-width="14"/>
+        <ellipse cx="180" cy="104" rx="150" ry="82" fill="var(--lagoon)"/>
+        <ellipse cx="180" cy="98" rx="110" ry="54" fill="var(--lagoon-2)" opacity=".5"/>
+        <text x="180" y="92" text-anchor="middle" class="zone-label">World Showcase</text>
+        <text x="180" y="106" text-anchor="middle" class="zone-label" style="font-size:8px">Lagoon</text>
+        <text x="40" y="52" text-anchor="middle" class="zone-label" style="font-size:8px">Mexico</text>
+        <text x="322" y="52" text-anchor="middle" class="zone-label" style="font-size:8px">Canada</text>
+        <rect x="110" y="196" width="140" height="36" rx="12" fill="var(--path)"/>
+        <text x="180" y="246" text-anchor="middle" class="zone-label" style="font-size:8px">Showcase Plaza</text>
+        <rect x="166" y="232" width="28" height="200" fill="var(--path)"/>
+        <rect x="118" y="276" width="54" height="48" rx="8" fill="var(--bldg)" stroke="var(--bldg-edge)" stroke-width="2"/>
+        <rect x="188" y="276" width="54" height="48" rx="8" fill="var(--bldg)" stroke="var(--bldg-edge)" stroke-width="2"/>
+        <text x="180" y="342" text-anchor="middle" class="zone-label">World Celebration</text>
+        <circle cx="180" cy="380" r="26" fill="#e0e7ff" stroke="#818cf8" stroke-width="2"/>
+        <path d="M162 368 L198 392 M198 368 L162 392 M154 380 H206 M180 354 V406" stroke="#818cf8" stroke-width="1" opacity=".5"/>
+        <text x="180" y="418" text-anchor="middle" class="zone-label" style="font-size:8px">Spaceship Earth</text>
+        <rect x="140" y="440" width="80" height="30" fill="var(--path)"/>
+        <text x="180" y="459" text-anchor="middle" class="zone-label">Main Entrance</text>
+        <path d="M14 230 H104 V430 H14Z" fill="var(--bldg)" stroke="var(--bldg-edge)" stroke-width="2" opacity=".8"/>
+        <text x="58" y="248" text-anchor="middle" class="zone-label">World</text>
+        <text x="58" y="260" text-anchor="middle" class="zone-label">Discovery</text>
+        <path d="M256 230 H346 V430 H256Z" fill="var(--bldg)" stroke="var(--bldg-edge)" stroke-width="2" opacity=".8"/>
+        <text x="302" y="248" text-anchor="middle" class="zone-label">World</text>
+        <text x="302" y="260" text-anchor="middle" class="zone-label">Nature</text>
+        ${you}
+        ${pins}
+      </svg>`;
+
+    const svg = $('map').querySelector('svg');
+    svg.addEventListener('click', e => {
+      const pin = e.target.closest('[data-pin]');
+      if (pin) { selectedPin = +pin.dataset.pin; renderMap(); return; }
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX; pt.y = e.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      setHere({ x: Math.round(p.x), y: Math.round(p.y), zone: null });
+    });
+    svg.querySelectorAll('[data-pin]').forEach(g => g.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedPin = +g.dataset.pin; renderMap(); }
+    }));
+
+    renderMapDetail(near);
+  }
+
+  function renderMapDetail(near) {
+    const d = $('map-detail');
+    d.hidden = false;
+    if (selectedPin === null) {
+      if (near.length) {
+        d.innerHTML = `<p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nearest to you</p>` +
+          near.map(i => `<button type="button" class="w-full text-left py-2 flex gap-3 items-center" data-go="${i}">
+            <span class="w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0" style="background:var(--pin)">${i + 1}</span>
+            <span class="text-sm text-gray-900 min-w-0">${locations[i].name}</span></button>`).join('');
+        d.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { selectedPin = +b.dataset.go; renderMap(); });
+      } else {
+        d.innerHTML = `<p class="text-sm text-gray-500">Tap a pin to see the location, or tap where you are to find the closest pumpkins.</p>`;
+      }
+      return;
+    }
+    const i = selectedPin, loc = locations[i], found = isFound(i), note = found ? (state[i].note || '') : '';
+    d.innerHTML = `
+      <div class="flex items-start gap-3">
+        <span class="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0" style="background:${found ? 'var(--pin-found)' : 'var(--pin)'}">${i + 1}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-900">${loc.name}</p>
+          <p class="text-xs text-gray-400 mt-0.5">${zoneLabel(loc.zone)}</p>
+          ${note ? `<p class="mt-1 text-xs text-gray-600">🎃 ${esc(note)}</p>` : ''}
+        </div>
+        <button id="detail-close" type="button" aria-label="Close" class="text-gray-400 hover:text-gray-700 text-lg leading-none px-1">×</button>
+      </div>
+      <button id="detail-assign" type="button" class="mt-3 w-full py-2 text-sm font-semibold rounded-lg ${found ? 'text-gray-700 bg-white border border-gray-200' : 'text-white bg-blue-600 hover:bg-blue-700'}">${found ? 'Edit' : 'Found it'}</button>`;
+    $('detail-close').onclick = () => { selectedPin = null; renderMap(); };
+    $('detail-assign').onclick = () => openSheet(i);
+  }
+
+  // ---------- Found sheet ----------
+  function openSheet(index) {
+    sheetIndex = index;
+    $('sheet-subtitle').textContent = `#${index + 1} ${locations[index].name}`;
+    $('sheet-note').value = (state[index] && state[index].note) || '';
+    $('sheet-found').textContent = isFound(index) ? 'Save' : 'Found it';
+    $('sheet-unfound').hidden = !isFound(index);
+    const m = $('sheet'), c = $('sheet-content');
+    m.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      m.style.opacity = '1';
+      c.style.transform = 'translateY(0)';
+    }));
+  }
+  function closeSheet() {
+    const m = $('sheet'), c = $('sheet-content');
+    m.style.opacity = '0';
+    c.style.transform = 'translateY(100%)';
+    $('sheet-note').blur();
+    setTimeout(() => { m.hidden = true; sheetIndex = null; }, reduceMotion() ? 0 : 250);
+  }
+  $('sheet-found').onclick = () => {
+    if (sheetIndex === null) return;
+    state[sheetIndex] = { found: true, note: $('sheet-note').value.trim() };
+    save(KEY, state); closeSheet(); renderAll();
+  };
+  $('sheet-unfound').onclick = () => {
+    if (sheetIndex === null) return;
+    delete state[sheetIndex];
+    save(KEY, state); closeSheet(); renderAll();
+  };
+  $('sheet-note').addEventListener('keydown', e => { if (e.key === 'Enter') $('sheet-found').click(); });
+  $('sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+
+  // ---------- Progress & completion ----------
+  function updateProgress() {
+    const total = locations.length;
+    const found = locations.filter((_, i) => isFound(i)).length;
+    $('progress-bar').style.width = `${(found / total) * 100}%`;
+    $('progress-text').textContent = `${found} / ${total}`;
+    if (found === total && !celebrated) { celebrated = true; showCompletion(); }
+    if (found < total) celebrated = false;
+  }
+  function showCompletion() {
+    const m = $('completion-modal');
+    m.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => { m.style.opacity = '1'; fireConfetti(); }));
+  }
+  function closeCompletion() {
+    const m = $('completion-modal');
+    m.style.opacity = '0';
+    setTimeout(() => { m.hidden = true; }, reduceMotion() ? 0 : 250);
+  }
+
+  function askReset() { $('reset-confirm').hidden = false; $('reset-btn').hidden = true; }
+  function cancelReset() { $('reset-confirm').hidden = true; $('reset-btn').hidden = false; }
+  function doReset() { state = {}; save(KEY, state); cancelReset(); renderAll(); }
+
+  // ---------- Confetti ----------
+  let particles = [];
+  const canvas = $('confetti-canvas'), ctx = canvas.getContext('2d');
+  function resizeCanvas() { canvas.width = innerWidth; canvas.height = innerHeight; }
+  addEventListener('resize', resizeCanvas); resizeCanvas();
+  function fireConfetti() {
+    if (reduceMotion()) return;
+    const colors = ['#ea580c', '#2563eb', '#16a34a', '#eab308', '#a5b4fc'];
+    particles = Array.from({ length: 120 }, () => ({
+      x: Math.random() * canvas.width, y: Math.random() * canvas.height - canvas.height,
+      w: Math.random() * 8 + 4, h: Math.random() * 8 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      vy: Math.random() * 3 + 2, vx: Math.random() * 2 - 1,
+      r: Math.random() * 360, vr: Math.random() * 10 - 5
+    }));
+    animateConfetti();
+  }
+  function animateConfetti() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let active = false;
+    particles.forEach(p => {
+      p.y += p.vy; p.x += p.vx; p.r += p.vr;
+      if (p.y < canvas.height) active = true;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r * Math.PI / 180);
+      ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    });
+    if (active && !$('completion-modal').hidden) requestAnimationFrame(animateConfetti);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function renderAll() { renderZoneChips(); renderList(); renderMap(); updateProgress(); }
+
+  celebrated = locations.every((_, i) => isFound(i));
+  setView(ui.view === 'map' ? 'map' : 'list');
+  renderAll();
+</script>
+
+</body>
+</html>

@@ -1,7 +1,7 @@
 {
   "name": "mousing",
   "short_name": "mousing",
-  "description": "Live Lightning Lane return times, park crowd trends and seasonal hunts for Walt Disney World.",
+  "description": "Live Lightning Lane return times, park crowd trends and a pumpkin finder for Walt Disney World.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",

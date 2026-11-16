@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>mousing</title>
-  <meta name="description" content="Live Lightning Lane return times, park crowd trends and seasonal hunts for Walt Disney World.">
+  <meta name="description" content="Live Lightning Lane return times, park crowd trends and a pumpkin finder for Walt Disney World.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="/manifest.json">
@@ -20,24 +20,29 @@
 <body class="bg-gray-50 text-gray-900 min-h-screen" x-data="lightningLaneApp" x-cloak>
 
   <header class="sticky top-0 z-50 bg-white border-b border-gray-200">
-    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <h1 class="text-lg font-bold text-gray-900 tracking-tight">mousing</h1>
-        <nav class="flex items-center gap-1 text-sm" aria-label="Pages">
-          <a href="/hunts/epcot-2026" class="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded-md">Hunts</a>
-          <a href="/settings" x-show="!demo" class="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded-md">Settings</a>
-        </nav>
+    <div class="max-w-5xl mx-auto px-4">
+      <div class="h-12 flex items-center justify-between">
+        <a href="/" class="text-lg font-bold text-gray-900 tracking-tight">mousing</a>
+        <div class="flex items-center gap-1">
+          <button type="button" @click="fetchData()" :disabled="loading" aria-label="Refresh return times"
+            class="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-40">
+            <template x-if="loading"><span class="spinner-sm"></span></template>
+            <svg x-show="!loading" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.6m14.8 2A8 8 0 004.6 9m0 0H9m11 11v-5h-.6m0 0a8 8 0 01-15.4-2m15.4 2H15"/>
+            </svg>
+          </button>
+          <a href="/settings" x-show="!demo" aria-label="Settings" class="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.3 4.3c.4-1.8 3-1.8 3.4 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001 2.5c1.8.5 1.8 3 0 3.4a1.7 1.7 0 00-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1c-.4 1.8-3 1.8-3.4 0a1.7 1.7 0 00-2.5-1c-1.6.9-3.3-.9-2.4-2.4a1.7 1.7 0 00-1.1-2.6c-1.8-.4-1.8-3 0-3.4a1.7 1.7 0 001.1-2.5c-.9-1.6.8-3.3 2.4-2.4a1.7 1.7 0 002.5-1.1z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </a>
+        </div>
       </div>
-      <button
-        @click="fetchData()"
-        :disabled="loading"
-        class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40"
-      >
-        <template x-if="loading">
-          <span class="spinner-sm"></span>
-        </template>
-        <span x-text="loading ? 'Loading...' : 'Refresh'"></span>
-      </button>
+      <nav class="grid grid-cols-2 gap-1 p-1 mb-2 bg-gray-100 rounded-lg text-sm font-medium sm:max-w-xs" aria-label="Pages">
+        <a href="/" aria-current="page" class="py-1.5 text-center rounded-md bg-white text-gray-900 shadow-sm">Lightning Lane</a>
+        <a href="/finder" class="py-1.5 text-center rounded-md text-gray-600 hover:text-gray-900">🎃 Finder</a>
+      </nav>
     </div>
   </header>
 
