@@ -462,9 +462,11 @@
         this.demo = mode.demo;
         this.repoUrl = mode.repo_url || this.repoUrl;
         const [saved] = await Promise.all([this.loadDashboard(), this.loadWatches(), this.fetchData()]);
-        // Until rides are chosen, show the rides that already have alerts.
+        // Until rides are chosen, show the rides that already have alerts, or
+        // every ride so a first visit has something to look at.
+        const alerted = [...new Set(this.watches.filter((w) => w.enabled).flatMap((w) => w.attractions || []))];
         this.dashboardRides = saved?.attractions
-          || [...new Set(this.watches.filter((w) => w.enabled).flatMap((w) => w.attractions || []))];
+          || (alerted.length ? alerted : this.attractions.map((a) => a.name));
         this.refreshMinutes = saved?.refresh_minutes ?? 2;
         this.scheduleRefresh();
         document.addEventListener("visibilitychange", () => this.scheduleRefresh());
