@@ -1,0 +1,19 @@
+# Copy to wrangler.toml and fill in your own KV namespace ID.
+name = "mousing"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "src/pages"
+
+[vars]
+# "true" makes this deployment the read-only public demo: live data only, no
+# alerts or settings. Leave "false" for your own copy.
+DEMO_MODE = "false"
+# The cron worker's URL, used by the test buttons in Settings.
+WATCHER_URL = "https://mousing-watcher.<your-subdomain>.workers.dev"
+# Secrets, set with `wrangler pages secret put <NAME>`:
+#   ADMIN_TOKEN        owner key for alerts and settings
+#   AUTH_SHARED_SECRET same value as on the cron worker
+#   VAPID_PUBLIC_KEY   for push notifications
+
+[[kv_namespaces]]
+binding = "KV"
+id = "<your KV namespace id>"

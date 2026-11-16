@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Settings - mousing</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.json">
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="/assets/styles.css" rel="stylesheet">
+  <script src="/assets/api.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen" x-data="settingsApp" x-cloak>
+
+  <header class="sticky top-0 z-50 bg-white border-b border-gray-200">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
+      <a href="/" aria-label="Back to mousing" class="p-1 -ml-1 text-gray-400 hover:text-gray-700 rounded-md transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </a>
+      <h1 class="text-lg font-bold text-gray-900 tracking-tight">Settings</h1>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+    <template x-if="demo">
+      <section class="p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-900">
+        <p>The public demo has no settings. Deploy your own copy to get alerts.</p>
+        <a :href="repoUrl" target="_blank" rel="noopener" class="inline-block mt-2 font-semibold text-blue-700 underline">Get mousing on GitHub</a>
+      </section>
+    </template>
+
+    <!-- Owner key -->
+    <section x-show="!demo" class="bg-white rounded-xl border border-gray-100 overflow-hidden" aria-labelledby="owner-key-title">
+      <div class="px-5 py-4 border-b border-gray-50">
+        <h2 id="owner-key-title" class="text-sm font-semibold text-gray-900">Owner key</h2>
+        <p class="text-xs text-gray-400 mt-0.5">The ADMIN_TOKEN you set on this deployment. It is saved on this device only.</p>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs" :class="keyStatus.ok ? 'text-green-600' : 'text-gray-500'" x-text="keyStatus.message"></p>
+        <div class="flex gap-2">
+          <label for="owner-key" class="sr-only">Owner key</label>
+          <input id="owner-key" type="password" autocomplete="current-password" x-model="ownerKey" placeholder="Owner key"
+            class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <button @click="saveKey()" :disabled="!ownerKey.trim()"
+            class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40">Save key</button>
+        </div>
+        <button x-show="hasKey" @click="forgetKey()" class="text-xs text-gray-500 underline">Remove the key from this device</button>
+      </div>
+    </section>
+
+    <!-- Notifications -->
+    <section x-show="!demo && keyStatus.ok" class="bg-white rounded-xl border border-gray-100 overflow-hidden" aria-labelledby="notifications-title">
+      <div class="px-5 py-4 border-b border-gray-50">
+        <h2 id="notifications-title" class="text-sm font-semibold text-gray-900">Notifications</h2>
+        <p class="text-xs text-gray-400 mt-0.5">How Lightning Lane alerts reach you</p>
+      </div>
+
+      <div class="p-5 space-y-5">
+
+        <!-- Push -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-gray-700">Push notifications</span>
+            <template x-if="pushSupported">
+              <button
+                @click="togglePush()"
+                :disabled="pushLoading"
+                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                :class="pushEnabled ? 'bg-blue-600' : 'bg-gray-200'"
+                :aria-pressed="pushEnabled"
+                aria-label="Push notifications on this device"
+              >
+                <span
+                  class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                  :class="pushEnabled ? 'translate-x-6' : 'translate-x-1'"
+                ></span>
+              </button>
+            </template>
+          </div>
+
+          <template x-if="pushNeedsHomeScreen">
+            <div class="space-y-2">
+              <p class="text-xs text-gray-600">To get push notifications on iPhone, add this app to your Home Screen:</p>
+              <ol class="text-xs text-gray-500 space-y-1 list-decimal ml-4">
+                <li>Tap <strong>Share</strong> in Safari.</li>
+                <li>Tap <strong>Add to Home Screen</strong>.</li>
+                <li>Open the app from your Home Screen and come back to this page.</li>
+              </ol>
+            </div>
+          </template>
+          <template x-if="!pushSupported && !pushNeedsHomeScreen">
+            <p class="text-xs text-gray-400">This browser does not support push notifications.</p>
+          </template>
+          <template x-if="pushSupported && pushBlocked">
+            <p class="text-xs text-red-500">Notifications are blocked. Allow them for this site in your browser settings.</p>
+          </template>
+          <template x-if="pushSupported && pushEnabled">
+            <div class="space-y-2">
+              <p class="text-xs text-green-600">Alerts will arrive on this device.</p>
+              <button @click="testPush()" :disabled="testingPush"
+                class="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-40"
+                x-text="testingPush ? 'Sending...' : 'Send test push'"></button>
+              <template x-if="pushTestResult">
+                <p class="text-xs" :class="pushTestResult.ok ? 'text-green-600' : 'text-red-500'" x-text="pushTestResult.message"></p>
+              </template>
+            </div>
+          </template>
+          <template x-if="pushSupported && !pushEnabled && !pushBlocked">
+            <p class="text-xs text-gray-400">Turn on to get alerts on this device.</p>
+          </template>
+        </div>
+
+        <div class="border-t border-gray-100"></div>
+
+        <!-- Email -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-gray-700">Email notifications</span>
+            <button
+              @click="notifyConfig.email_enabled = !notifyConfig.email_enabled"
+              class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+              :class="notifyConfig.email_enabled ? 'bg-blue-600' : 'bg-gray-200'"
+              :aria-pressed="notifyConfig.email_enabled"
+              aria-label="Email notifications"
+            >
+              <span
+                class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                :class="notifyConfig.email_enabled ? 'translate-x-6' : 'translate-x-1'"
+              ></span>
+            </button>
+          </div>
+
+          <template x-if="notifyConfig.email_enabled">
+            <div class="space-y-2">
+              <label for="email" class="sr-only">Email address</label>
+              <input id="email" type="email" x-model="notifyConfig.email" placeholder="you@example.com"
+                class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <button @click="testEmail()" :disabled="!notifyConfig.email.trim() || testingEmail"
+                class="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-40"
+                x-text="testingEmail ? 'Sending...' : 'Send test email'"></button>
+              <template x-if="emailTestResult">
+                <p class="text-xs" :class="emailTestResult.ok ? 'text-green-600' : 'text-red-500'" x-text="emailTestResult.message"></p>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <div class="border-t border-gray-100 pt-4">
+          <template x-if="saveMessage">
+            <p class="text-xs mb-2" :class="saveMessage.ok ? 'text-green-600' : 'text-red-500'" x-text="saveMessage.text"></p>
+          </template>
+          <button @click="saveNotifications()" :disabled="savingNotifications"
+            class="w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40"
+            x-text="savingNotifications ? 'Saving...' : 'Save notification settings'"></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("settingsApp", () => ({
+      demo: false,
+      repoUrl: "https://github.com/m4ndolore/mousing",
+      ownerKey: "",
+      hasKey: false,
+      keyStatus: { ok: false, message: "Checking..." },
+
+      notifyConfig: { email_enabled: false, email: "" },
+      savingNotifications: false,
+      saveMessage: null,
+
+      pushSupported: false,
+      pushEnabled: false,
+      pushBlocked: false,
+      pushLoading: false,
+      pushNeedsHomeScreen: false,
+      testingPush: false,
+      pushTestResult: null,
+      testingEmail: false,
+      emailTestResult: null,
+
+      async init() {
+        const mode = await Mousing.mode();
+        this.demo = mode.demo;
+        this.repoUrl = mode.repo_url || this.repoUrl;
+        if (this.demo) return;
+        this.hasKey = Boolean(Mousing.token());
+        await this.loadConfig();
+        if (this.keyStatus.ok) await this.checkPushSupport();
+      },
+
+      // --- Owner key ---
+
+      async saveKey() {
+        Mousing.setToken(this.ownerKey.trim());
+        this.ownerKey = "";
+        this.hasKey = true;
+        await this.loadConfig();
+        if (this.keyStatus.ok) await this.checkPushSupport();
+      },
+
+      forgetKey() {
+        Mousing.setToken("");
+        this.hasKey = false;
+        this.keyStatus = { ok: false, message: "No owner key on this device." };
+      },
+
+      // --- Config ---
+
+      async loadConfig() {
+        try {
+          const res = await Mousing.api("/api/config");
+          const data = await res.json();
+          if (!res.ok) {
+            this.keyStatus = { ok: false, message: data.error || "The owner key was not accepted." };
+            return;
+          }
+          this.keyStatus = { ok: true, message: "Owner key accepted on this device." };
+          this.notifyConfig = {
+            email_enabled: data.notifications?.email_enabled || false,
+            email: data.notifications?.email || "",
+          };
+        } catch (e) {
+          this.keyStatus = { ok: false, message: "Could not reach this deployment. Check your connection." };
+        }
+      },
+
+      async saveNotifications() {
+        this.savingNotifications = true;
+        this.saveMessage = null;
+        try {
+          const res = await Mousing.api("/api/config", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notifications: { ...this.notifyConfig } }),
+          });
+          const data = await res.json();
+          this.saveMessage = res.ok
+            ? { ok: true, text: "Notification settings saved." }
+            : { ok: false, text: data.error || "Could not save the settings. Try again." };
+          return res.ok;
+        } catch (e) {
+          this.saveMessage = { ok: false, text: "Could not reach this deployment. Check your connection." };
+          return false;
+        } finally {
+          this.savingNotifications = false;
+        }
+      },
+
+      // --- Push ---
+
+      async checkPushSupport() {
+        const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+        // iOS delivers push only to apps opened from the Home Screen.
+        if (isIOS && !standalone) {
+          this.pushNeedsHomeScreen = true;
+          return;
+        }
+
+        this.pushSupported = "serviceWorker" in navigator && "PushManager" in window;
+        if (!this.pushSupported) return;
+        if (Notification.permission === "denied") {
+          this.pushBlocked = true;
+          return;
+        }
+
+        await navigator.serviceWorker.register("/sw.js");
+        const reg = await navigator.serviceWorker.ready;
+        this.pushEnabled = Boolean(await reg.pushManager.getSubscription());
+      },
+
+      async togglePush() {
+        if (this.pushEnabled) await this.unsubscribePush();
+        else await this.subscribePush();
+      },
+
+      async subscribePush() {
+        this.pushLoading = true;
+        this.pushTestResult = null;
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            this.pushBlocked = permission === "denied";
+            return;
+          }
+          const res = await Mousing.api("/api/push/vapid-key");
+          const { key } = await res.json();
+          if (!key) throw new Error("Set VAPID_PUBLIC_KEY on this deployment to use push.");
+
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: this.base64urlToUint8Array(key),
+          });
+          const saved = await Mousing.api("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sub.toJSON()),
+          });
+          if (!saved.ok) throw new Error("Could not save this device for push. Try again.");
+          this.pushEnabled = true;
+        } catch (e) {
+          this.pushTestResult = { ok: false, message: e.message };
+        } finally {
+          this.pushLoading = false;
+        }
+      },
+
+      async unsubscribePush() {
+        this.pushLoading = true;
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            await Mousing.api("/api/push/subscribe", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint: sub.endpoint }),
+            });
+            await sub.unsubscribe();
+          }
+          this.pushEnabled = false;
+        } catch (e) {
+          this.pushTestResult = { ok: false, message: "Could not turn off push. Try again." };
+        } finally {
+          this.pushLoading = false;
+        }
+      },
+
+      async testPush() {
+        this.testingPush = true;
+        this.pushTestResult = await this.sendTest("/api/push/test", "Test push sent.");
+        this.testingPush = false;
+      },
+
+      async testEmail() {
+        this.testingEmail = true;
+        // Save first so the test goes to the address on screen.
+        if (await this.saveNotifications()) {
+          this.emailTestResult = await this.sendTest("/api/notify/test", "Test email sent.");
+        }
+        this.testingEmail = false;
+      },
+
+      async sendTest(path, success) {
+        try {
+          const res = await Mousing.api(path, { method: "POST" });
+          const data = await res.json();
+          return res.ok ? { ok: true, message: success } : { ok: false, message: data.error || "The test did not send." };
+        } catch (e) {
+          return { ok: false, message: "Could not reach this deployment. Check your connection." };
+        }
+      },
+
+      base64urlToUint8Array(base64url) {
+        const padded = base64url + "=".repeat((4 - (base64url.length % 4)) % 4);
+        const binary = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+      },
+    }));
+  });
+  </script>
+
+</body>
+</html>

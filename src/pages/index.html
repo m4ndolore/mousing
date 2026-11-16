@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>mousing</title>
+  <meta name="description" content="Live Lightning Lane return times, park crowd trends and seasonal hunts for Walt Disney World.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.json">
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="/assets/styles.css" rel="stylesheet">
+  <script src="/assets/api.js"></script>
+  <script src="/assets/lightning-lane-form.js"></script>
+  <script src="/assets/park-trends.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900 min-h-screen" x-data="lightningLaneApp" x-cloak>
+
+  <header class="sticky top-0 z-50 bg-white border-b border-gray-200">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <h1 class="text-lg font-bold text-gray-900 tracking-tight">mousing</h1>
+        <nav class="flex items-center gap-1 text-sm" aria-label="Pages">
+          <a href="/hunts/epcot-2026" class="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded-md">Hunts</a>
+          <a href="/settings" x-show="!demo" class="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded-md">Settings</a>
+        </nav>
+      </div>
+      <button
+        @click="fetchData()"
+        :disabled="loading"
+        class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40"
+      >
+        <template x-if="loading">
+          <span class="spinner-sm"></span>
+        </template>
+        <span x-text="loading ? 'Loading...' : 'Refresh'"></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6 space-y-4">
+
+    <template x-if="error">
+      <div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm" x-text="error"></div>
+    </template>
+
+    <template x-if="demo">
+      <section class="p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-900" aria-label="About this demo">
+        <p class="font-semibold">This is the public demo.</p>
+        <p class="mt-1">Return times and crowd trends here are live. To get a push or email alert when a ride's return time lands in your window, deploy your own copy on Cloudflare's free plan.</p>
+        <a :href="repoUrl" target="_blank" rel="noopener" class="inline-block mt-2 font-semibold text-blue-700 underline">Get mousing on GitHub</a>
+      </section>
+    </template>
+
+    <template x-if="needsKey">
+      <p class="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
+        Alerts are hidden until you enter the owner key in <a href="/settings" class="underline font-semibold">Settings</a>.
+      </p>
+    </template>
+
+    <!-- Park trends -->
+    <section x-data="parkTrends" class="bg-white rounded-xl border border-gray-100 p-5" aria-labelledby="park-trends-title">
+      <h2 id="park-trends-title" class="text-base font-semibold text-gray-900">Park crowds today</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Average standby wait in minutes across open rides, park time (ET)</p>
+
+      <template x-if="error">
+        <p class="mt-3 text-sm text-red-700" x-text="error"></p>
+      </template>
+
+      <template x-if="outlook.length">
+        <div class="mt-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide" x-text="outlookHeading(outlook)"></h3>
+          <ul class="mt-1 divide-y divide-gray-50">
+            <template x-for="row in outlook" :key="row.key">
+              <li class="py-1.5 text-xs flex items-baseline justify-between gap-3">
+                <span class="font-medium text-gray-900 whitespace-nowrap" x-text="row.name"></span>
+                <span class="text-right">
+                  <span class="block text-gray-700" x-text="outlookLabel(row)"></span>
+                  <span class="block text-gray-400" x-text="outlookDetail(row)"></span>
+                </span>
+              </li>
+            </template>
+          </ul>
+          <p class="mt-1 text-xs text-gray-400">Crowd levels across all years from <a href="https://queue-times.com/" target="_blank" rel="noopener" class="underline">Queue-Times.com</a>. Each park is compared with its own average, so levels do not compare between parks.</p>
+        </div>
+      </template>
+
+      <template x-if="!error && !loading && !hasReadings">
+        <p class="mt-3 text-sm text-gray-500">No readings yet today. Readings start within 15 minutes of park opening.</p>
+      </template>
+
+      <template x-if="hasReadings">
+        <div>
+          <p class="mt-3 text-sm font-medium text-gray-900" x-show="best" x-text="bestSummary(best, parks)"></p>
+          <p class="mt-1 text-xs text-gray-500" x-show="!hasBaseline">Comparison with a usual day starts after two more readings today.</p>
+
+          <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-gray-600" aria-hidden="true">
+            <template x-for="park in parks" :key="park.id">
+              <span class="inline-flex items-center gap-1.5">
+                <span class="inline-block w-3 h-0.5 rounded-full" :style="'background:' + parkColor(park.name)"></span>
+                <span x-text="shortParkName(park.name)"></span>
+              </span>
+            </template>
+            <span x-show="hasBaseline" class="text-gray-400">Dashed line is projected</span>
+          </div>
+
+          <div x-ref="plot" class="relative mt-2" style="touch-action: pan-y" @pointermove="trackPointer($event)" @pointerdown="trackPointer($event)" @pointerleave="hover = null">
+            <div x-html="svg"></div>
+            <template x-if="hover">
+              <div>
+                <div class="absolute top-3 w-px bg-gray-300 pointer-events-none" :style="'left:' + hover.x + 'px; height:184px'"></div>
+                <div class="absolute top-0 z-10 bg-white border border-gray-200 rounded-lg shadow-sm px-2.5 py-1.5 text-xs pointer-events-none whitespace-nowrap"
+                  :style="hover.x > width / 2 ? 'right:' + (width - hover.x + 8) + 'px' : 'left:' + (hover.x + 8) + 'px'">
+                  <div class="font-semibold text-gray-900" x-text="hover.label"></div>
+                  <template x-for="row in hover.rows" :key="row.name">
+                    <div class="flex items-center gap-1.5 text-gray-600">
+                      <span class="inline-block w-2 h-2 rounded-full" :style="'background:' + row.color"></span>
+                      <span x-text="row.name + ': ' + Math.round(row.avg) + ' min' + (row.projected ? ' (projected)' : '')"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-xs text-left">
+              <thead class="text-gray-400">
+                <tr>
+                  <th scope="col" class="py-1.5 pr-3 font-medium">Park</th>
+                  <th scope="col" class="py-1.5 pr-3 font-medium">Now</th>
+                  <th scope="col" class="py-1.5 pr-3 font-medium">Rest of day</th>
+                  <th scope="col" class="py-1.5 font-medium">Compared with usual</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50 text-gray-700">
+                <template x-for="row in tableRows" :key="row.name">
+                  <tr>
+                    <th scope="row" class="py-1.5 pr-3 font-medium text-gray-900" x-text="row.name"></th>
+                    <td class="py-1.5 pr-3 whitespace-nowrap" x-text="row.current"></td>
+                    <td class="py-1.5 pr-3 whitespace-nowrap" x-text="row.projected"></td>
+                    <td class="py-1.5" x-text="row.versus"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-2 text-xs text-gray-400" x-show="usesReference">
+            Usual waits are recent averages for any day, not this weekday or season, from
+            <a href="https://ropedropplanner.com/" target="_blank" rel="noopener" class="underline">RopeDrop Planner</a>
+            as of <span x-text="baselineDate"></span>. Ride averages also use
+            <a href="https://queue-times.com/" target="_blank" rel="noopener" class="underline">Queue-Times.com</a>.
+            Your own readings replace them after two past readings of this weekday.
+          </p>
+        </div>
+      </template>
+    </section>
+
+    <!-- Dashboard -->
+    <section class="bg-white rounded-xl border border-gray-100 p-5 space-y-4" aria-labelledby="dashboard-heading">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="dashboard-heading" class="text-base font-semibold text-gray-900">Current times</h2>
+        <div class="flex items-center gap-2">
+          <label for="refresh-rate" class="text-xs text-gray-500">Update</label>
+          <select id="refresh-rate" x-model.number="refreshMinutes" @change="changeRefreshRate()" class="px-2 py-1 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="1">Every minute</option>
+            <option value="2">Every 2 minutes</option>
+            <option value="5">Every 5 minutes</option>
+            <option value="0">Manually</option>
+          </select>
+          <button @click="togglePicker()" class="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-md" x-text="picking ? 'Done' : 'Choose rides'"></button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="inline-flex rounded-lg border border-gray-200 overflow-hidden" role="group" aria-label="Pass type">
+          <template x-for="option in passOptions" :key="option.value">
+            <button type="button" @click="passFilter = option.value" :aria-pressed="passFilter === option.value"
+              class="px-3 py-1.5 text-xs font-medium transition-colors"
+              :class="passFilter === option.value ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'"
+              x-text="option.label"></button>
+          </template>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="ride-sort" class="text-xs text-gray-500">Sort by</label>
+          <select id="ride-sort" x-model="rideSort" class="px-2 py-1 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="next">Next available</option>
+            <option value="name">Name (A to Z)</option>
+            <option value="standby">Shortest standby</option>
+          </select>
+        </div>
+      </div>
+
+      <template x-if="picking">
+        <div>
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            <template x-for="park in parkNames" :key="park">
+              <button @click="activePark = park" class="px-3 py-1 text-xs font-medium rounded-full border transition-colors"
+                :class="presetClass(activePark === park)"
+                x-text="park + (pickedIn(park) ? ' (' + pickedIn(park) + ')' : '')"></button>
+            </template>
+          </div>
+          <div class="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-80 overflow-y-auto">
+            <template x-for="a in visibleRides" :key="a.attractionId">
+              <label class="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-gray-50">
+                <input type="checkbox" :checked="dashboardRides.includes(a.name)" @change="togglePick(a.name)" class="h-4 w-4">
+                <span class="flex-1 min-w-0">
+                  <span class="block text-sm text-gray-900 truncate" x-text="a.name"></span>
+                  <span class="block text-xs text-gray-400 truncate" x-text="rideLine(a)"></span>
+                </span>
+              </label>
+            </template>
+            <template x-if="!visibleRides.length">
+              <div class="px-3 py-4 text-xs text-gray-400" x-text="emptyRidesText"></div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-for="group in dashboardGroups" :key="group.park">
+        <div>
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide" x-text="group.park"></h3>
+          <div class="mt-1 divide-y divide-gray-50">
+            <template x-for="ride in group.rides" :key="ride.attractionId">
+              <div class="py-2 flex items-center gap-2">
+                <a :href="appLink.url" target="_blank" rel="noopener" :aria-label="appLink.label + ': ' + ride.name + ', ' + statusText(ride.name)"
+                  class="flex-1 min-w-0 flex items-center justify-between gap-3 -mx-1 px-1 py-1 rounded-md hover:bg-gray-50 active:bg-gray-100">
+                  <span class="min-w-0">
+                    <span class="block text-sm text-gray-900 truncate" x-text="ride.name"></span>
+                    <span class="block text-xs text-gray-400 truncate" x-text="rideDetail(ride)"></span>
+                  </span>
+                  <span class="flex-shrink-0 text-sm font-semibold" :class="ride.state === 'AVAILABLE' ? 'text-green-700' : 'text-gray-400'" x-text="statusText(ride.name)"></span>
+                </a>
+                <button x-show="canAlert" @click="alertFor(ride.name)" :aria-label="(hasAlert(ride.name) ? 'Edit alert for ' : 'Add alert for ') + ride.name"
+                  class="flex-shrink-0 p-2 rounded-md hover:bg-gray-100" :class="hasAlert(ride.name) ? 'text-blue-600' : 'text-gray-300'">
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" :fill="hasAlert(ride.name) ? 'currentColor' : 'none'" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <p class="text-sm text-gray-500" x-show="!dashboardGroups.length && !picking && !loading" x-text="emptyDashboardText"></p>
+      <p class="text-xs text-gray-400" x-show="fetchedAt">Updated <span x-text="fetchedAt"></span> · times are park time (ET)</p>
+    </section>
+
+    <h2 class="text-base font-semibold text-gray-900 pt-2" x-show="canAlert && watches.length">Alerts</h2>
+
+    <!-- Alerts -->
+    <template x-for="watch in watches" :key="watch.id">
+      <div class="bg-white rounded-xl border border-gray-100 p-5">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-base font-semibold text-gray-900 truncate" x-text="watch.name"></h3>
+            <div class="text-xs text-gray-400 mt-0.5" x-text="watchSummary(watch)"></div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <button @click="startEdit(watch)" class="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-md">Edit</button>
+            <button @click="deleteWatch(watch)" class="px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 rounded-md">Delete</button>
+            <button
+              @click="toggleWatch(watch)"
+              :disabled="saving"
+              :aria-label="'Toggle notifications for ' + watch.name"
+              class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors ml-1"
+              :class="watch.enabled ? 'bg-green-500' : 'bg-gray-200'"
+            >
+              <span
+                class="inline-block h-4 w-4 rounded-full bg-white shadow-sm"
+                :style="'transform: translateX(' + (watch.enabled ? '1.25rem' : '0.25rem') + '); transition: transform 0.2s ease'"
+              ></span>
+            </button>
+          </div>
+        </div>
+        <div class="mt-3 divide-y divide-gray-50">
+          <template x-for="name in watch.attractions" :key="name">
+            <a :href="appLink.url" target="_blank" rel="noopener" :aria-label="appLink.label + ': ' + name + ', ' + statusText(name)"
+              class="py-3 -mx-2 px-2 flex items-center justify-between text-sm rounded-md hover:bg-gray-50 active:bg-gray-100">
+              <span class="text-blue-600 underline truncate" x-text="name"></span>
+              <span class="ml-3 flex-shrink-0 font-semibold" :class="statusFor(name).state === 'AVAILABLE' ? 'text-green-700' : 'text-gray-400'" x-text="statusText(name)"></span>
+            </a>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="canAlert && !draft">
+      <button @click="startEdit(null)" class="w-full py-3 text-sm font-semibold text-blue-600 bg-white border border-dashed border-blue-200 rounded-xl hover:bg-blue-50">+ New alert</button>
+    </template>
+
+    <!-- Editor -->
+    <template x-if="draft">
+      <div id="alert-editor" class="bg-white rounded-xl border border-blue-200 p-5 space-y-4 scroll-mt-16">
+        <div class="text-sm font-semibold text-gray-900" x-text="draft.id ? 'Edit alert' : 'New alert'"></div>
+
+        <div>
+          <label class="text-xs text-gray-500 block mb-1">Name (optional)</label>
+          <input type="text" x-model="draft.name" :placeholder="defaultName(draft.attractions)" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+
+        <div>
+          <div class="flex flex-wrap gap-1.5 mb-2">
+            <template x-for="park in parkNames" :key="park">
+              <button @click="activePark = park" class="px-3 py-1 text-xs font-medium rounded-full border transition-colors"
+                :class="activePark === park ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300'"
+                x-text="park + (selectedIn(park) ? ' (' + selectedIn(park) + ')' : '')"></button>
+            </template>
+          </div>
+          <div class="border border-gray-100 rounded-lg divide-y divide-gray-50 max-h-80 overflow-y-auto">
+            <template x-for="a in visibleRides" :key="a.attractionId">
+              <label class="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-gray-50">
+                <input type="checkbox" :checked="draft.attractions.includes(a.name)" @change="toggleAttraction(a.name)" class="h-4 w-4">
+                <span class="flex-1 min-w-0">
+                  <span class="block text-sm text-gray-900 truncate" x-text="a.name"></span>
+                  <span class="block text-xs text-gray-400" x-text="rideLine(a)"></span>
+                </span>
+              </label>
+            </template>
+            <template x-if="!visibleRides.length">
+              <div class="px-3 py-4 text-xs text-gray-400" x-text="emptyRidesText"></div>
+            </template>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs text-gray-500" id="return-time-label">Return time</div>
+          <div class="flex flex-wrap gap-1.5" role="group" aria-labelledby="return-time-label">
+            <template x-for="preset in timePresets" :key="preset.label">
+              <button type="button" @click="draft.windowStart = preset.start; draft.windowEnd = preset.end"
+                class="px-3 py-1 text-xs font-medium rounded-full border transition-colors"
+                :class="presetClass(draft.windowStart === preset.start && draft.windowEnd === preset.end)"
+                x-text="preset.label"></button>
+            </template>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="window-start" class="text-xs text-gray-500 block mb-1">From</label>
+              <select id="window-start" x-model="draft.windowStart" @change="syncTimes('start')" class="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Park open</option>
+                <template x-for="slot in timeOptions" :key="slot.value">
+                  <option :value="slot.value" :selected="slot.value === draft.windowStart" x-text="slot.label"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label for="window-end" class="text-xs text-gray-500 block mb-1">To</label>
+              <select id="window-end" x-model="draft.windowEnd" @change="syncTimes('end')" class="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Park close</option>
+                <template x-for="slot in timeOptions" :key="slot.value">
+                  <option :value="slot.value" :selected="slot.value === draft.windowEnd" x-text="slot.label"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs text-gray-500" id="park-days-label">Park days</div>
+          <div class="flex flex-wrap gap-1.5" role="group" aria-labelledby="park-days-label">
+            <template x-for="preset in datePresets" :key="preset.label">
+              <button type="button" @click="draft.dateStart = preset.start; draft.dateEnd = preset.end"
+                class="px-3 py-1 text-xs font-medium rounded-full border transition-colors"
+                :class="presetClass(draft.dateStart === preset.start && draft.dateEnd === preset.end)"
+                x-text="preset.label"></button>
+            </template>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="date-start" class="text-xs text-gray-500 block mb-1">From</label>
+              <input id="date-start" type="date" x-model="draft.dateStart" @change="syncDates('start')" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label for="date-end" class="text-xs text-gray-500 block mb-1">To</label>
+              <!-- Blur, not change: Chrome reports partial years while typing, which would overwrite the start date. -->
+              <input id="date-end" type="date" x-model="draft.dateEnd" :min="draft.dateStart" @blur="syncDates('end')" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Check every</label>
+            <select x-model.number="draft.interval" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="1">1 minute (for 2 hours)</option>
+              <option value="2">2 minutes (for 2 hours)</option>
+              <option value="5">5 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">1 hour</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2">
+          <button @click="draft = null" class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+          <button @click="saveDraft()" :disabled="saving || !draft.attractions.length"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40"
+            x-text="saving ? 'Saving...' : 'Save'"></button>
+        </div>
+      </div>
+    </template>
+
+    <div class="text-center text-xs text-gray-400" x-text="appLink.hint"></div>
+
+    <footer class="pt-4 pb-8 text-center text-xs text-gray-400 space-y-1">
+      <p>Live data from <a href="https://themeparks.wiki/" target="_blank" rel="noopener" class="underline">ThemeParks.wiki</a>. Usual waits and sell-outs from <a href="https://ropedropplanner.com/" target="_blank" rel="noopener" class="underline">RopeDrop Planner</a>. Crowd levels from <a href="https://queue-times.com/" target="_blank" rel="noopener" class="underline">Queue-Times.com</a>.</p>
+      <p>Unofficial fan project. Not affiliated with or endorsed by Disney. <a :href="repoUrl" target="_blank" rel="noopener" class="underline">Source on GitHub</a>.</p>
+    </footer>
+
+  </main>
+
+  <script>
+  const PARK_TZ = "America/New_York";
+  const DEFAULT_ATTRACTION = "Slinky Dog Dash";
+  const OTHER_PARK = "Other";
+  const DASHBOARD_KEY = "mousing:dashboard";
+
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("lightningLaneApp", () => ({
+      loading: false,
+      saving: false,
+      demo: false,
+      needsKey: false,
+      repoUrl: "https://github.com/m4ndolore/mousing",
+      error: null,
+      attractions: [],
+      fetchedAt: "",
+      fetchedAtMs: 0,
+      watches: [],
+      dashboardRides: [],
+      refreshMinutes: 2,
+      picking: false,
+      refreshTimer: null,
+      draft: null,
+      activePark: "",
+      passFilter: "multi",
+      rideSort: "next",
+      passOptions: [
+        { value: "multi", label: "Multi Pass" },
+        { value: "single", label: "Single Pass" },
+      ],
+      appLink: LightningLaneForm.disneyAppLink(navigator.userAgent, navigator.maxTouchPoints),
+      timePresets: [],
+      datePresets: [],
+      timeOptions: [],
+
+      get parkNames() {
+        return [...new Set(this.attractions.map((a) => a.parkName || OTHER_PARK))].sort();
+      },
+
+      get canAlert() {
+        return !this.demo && !this.needsKey;
+      },
+
+      async init() {
+        const mode = await Mousing.mode();
+        this.demo = mode.demo;
+        this.repoUrl = mode.repo_url || this.repoUrl;
+        const [saved] = await Promise.all([this.loadDashboard(), this.loadWatches(), this.fetchData()]);
+        // Until rides are chosen, show the rides that already have alerts.
+        this.dashboardRides = saved?.attractions
+          || [...new Set(this.watches.filter((w) => w.enabled).flatMap((w) => w.attractions || []))];
+        this.refreshMinutes = saved?.refresh_minutes ?? 2;
+        this.scheduleRefresh();
+        document.addEventListener("visibilitychange", () => this.scheduleRefresh());
+      },
+
+      get dashboardGroups() {
+        const rides = LightningLaneForm.filterByPass(this.attractions, this.passFilter);
+        return LightningLaneForm.dashboardGroups(rides, this.dashboardRides, OTHER_PARK)
+          .map((group) => ({ ...group, rides: LightningLaneForm.sortRides(group.rides, this.rideSort) }));
+      },
+
+      get visibleRides() {
+        return LightningLaneForm.sortRides(
+          LightningLaneForm.filterByPass(this.attractionsIn(this.activePark), this.passFilter),
+          this.rideSort,
+        );
+      },
+
+      get passName() {
+        return this.passFilter === "single" ? "Single Pass" : "Multi Pass";
+      },
+
+      get emptyRidesText() {
+        return this.loading ? "Loading rides…" : "No " + this.passName + " rides in this park.";
+      },
+
+      get emptyDashboardText() {
+        return "No " + this.passName + " rides selected. Select Choose rides to add some.";
+      },
+
+      rideDetail(ride) {
+        return LightningLaneForm.rideDetail(ride);
+      },
+
+      rideLine(ride) {
+        return [this.statusText(ride.name), this.rideDetail(ride)].filter(Boolean).join(" · ");
+      },
+
+      // Keep the ride being edited in view when it uses the other pass type.
+      showPassFor(name) {
+        this.passFilter = this.statusFor(name).paid ? "single" : "multi";
+      },
+
+      // Refresh on the chosen rate while the page is visible, and right away on
+      // return if the data is older than one interval.
+      scheduleRefresh() {
+        clearInterval(this.refreshTimer);
+        this.refreshTimer = null;
+        if (document.hidden || !this.refreshMinutes) return;
+        const intervalMs = this.refreshMinutes * 60_000;
+        if (Date.now() - this.fetchedAtMs >= intervalMs) this.fetchData();
+        this.refreshTimer = setInterval(() => this.fetchData(), intervalMs);
+      },
+
+      changeRefreshRate() {
+        this.scheduleRefresh();
+        this.saveDashboard();
+      },
+
+      togglePicker() {
+        this.picking = !this.picking;
+      },
+
+      pickedIn(park) {
+        return this.attractionsIn(park).filter((a) => this.dashboardRides.includes(a.name)).length;
+      },
+
+      togglePick(name) {
+        const i = this.dashboardRides.indexOf(name);
+        if (i >= 0) this.dashboardRides.splice(i, 1);
+        else this.dashboardRides.push(name);
+        this.saveDashboard();
+      },
+
+      // Demo visitors keep their ride picks in this browser; owners keep them on the server.
+      readLocalDashboard() {
+        try {
+          return JSON.parse(localStorage.getItem(DASHBOARD_KEY)) || null;
+        } catch (e) {
+          return null;
+        }
+      },
+
+      async loadDashboard() {
+        if (this.demo) return this.readLocalDashboard();
+        try {
+          const res = await Mousing.api("/api/lightning-lane/dashboard");
+          if (res.status === 401 || res.status === 503) return this.readLocalDashboard();
+          if (!res.ok) throw new Error();
+          return await res.json();
+        } catch (e) {
+          this.error = "Could not load your dashboard rides.";
+          return null;
+        }
+      },
+
+      async saveDashboard() {
+        const config = { attractions: [...this.dashboardRides], refresh_minutes: this.refreshMinutes };
+        if (this.demo || this.needsKey) {
+          try {
+            localStorage.setItem(DASHBOARD_KEY, JSON.stringify(config));
+          } catch (e) {
+            // Private browsing can refuse storage; the picks then last for this visit.
+          }
+          return;
+        }
+        try {
+          const res = await Mousing.api("/api/lightning-lane/dashboard", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(config),
+          });
+          if (!res.ok) throw new Error();
+        } catch (e) {
+          this.error = "Could not save your dashboard. Try again.";
+        }
+      },
+
+      alertsFor(name) {
+        return this.watches.filter((w) => w.attractions?.includes(name));
+      },
+
+      hasAlert(name) {
+        return this.alertsFor(name).some((w) => w.enabled);
+      },
+
+      // Edit the ride's alert, or start a fast one for today from now.
+      alertFor(name) {
+        const existing = this.alertsFor(name)[0];
+        if (existing) return this.startEdit(existing);
+        this.startEdit(null);
+        const fromNow = this.timePresets[0];
+        const today = this.datePresets[0];
+        Object.assign(this.draft, {
+          attractions: [name],
+          windowStart: fromNow.start,
+          windowEnd: fromNow.end,
+          dateStart: today.start,
+          dateEnd: today.end,
+          interval: 1,
+        });
+        this.timeOptions = LightningLaneForm.timeSlots(fromNow.start);
+        const park = this.statusFor(name).parkName;
+        if (park) this.activePark = park;
+        this.showPassFor(name);
+        this.$nextTick(() => document.getElementById("alert-editor")?.scrollIntoView());
+      },
+
+      attractionsIn(park) {
+        return this.attractions.filter((a) => (a.parkName || OTHER_PARK) === park);
+      },
+
+      selectedIn(park) {
+        return this.draft ? this.attractionsIn(park).filter((a) => this.draft.attractions.includes(a.name)).length : 0;
+      },
+
+      statusFor(name) {
+        return this.attractions.find((a) => a.name === name) || {};
+      },
+
+      formatTime(iso) {
+        return new Date(iso).toLocaleTimeString("en-US", { timeZone: PARK_TZ, hour: "numeric", minute: "2-digit" });
+      },
+
+      statusText(name) {
+        const a = this.statusFor(name);
+        if (a.status && a.status !== "OPERATING") return a.status === "DOWN" ? "Down" : "Closed";
+        if (a.state === "AVAILABLE" && a.returnStart) {
+          return this.formatTime(a.returnStart) + (a.returnEnd ? " – " + this.formatTime(a.returnEnd) : "");
+        }
+        return { TEMP_FULL: "Temporarily full", FINISHED: "Sold out" }[a.state] || (this.attractions.length ? "No data" : "—");
+      },
+
+      watchSummary(w) {
+        const parts = [];
+        const tw = w.time_window;
+        if (tw && (tw.start || tw.end)) parts.push("Return " + (tw.start || "open") + "–" + (tw.end || "close"));
+        else parts.push("Any return time");
+        const dr = w.date_range;
+        if (dr?.start) parts.push(dr.start === dr.end ? dr.start : dr.start + " → " + dr.end);
+        let every = "every " + (w.check_interval_minutes || 15) + " min";
+        if (w.fast_until) every += " until " + this.formatTime(w.fast_until);
+        parts.push(every);
+        return parts.join(" · ");
+      },
+
+      defaultName(names) {
+        if (!names.length) return "Lightning Lane alert";
+        const parks = [...new Set(names.map((n) => this.statusFor(n).parkName).filter(Boolean))];
+        if (names.length > 1 && parks.length === 1) return parks[0] + " Lightning Lanes";
+        return names[0] + (names.length > 1 ? " +" + (names.length - 1) : "") + " Lightning Lane";
+      },
+
+      async fetchData() {
+        this.loading = true;
+        this.error = null;
+        try {
+          const res = await fetch("/api/lightning-lane");
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Failed to fetch Lightning Lane data");
+          this.attractions = data.attractions;
+          if (!this.parkNames.includes(this.activePark)) this.activePark = this.parkNames[0] || "";
+          this.fetchedAt = new Date(data.fetched_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          this.fetchedAtMs = Date.now();
+        } catch (e) {
+          this.error = e.message;
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async loadWatches() {
+        if (this.demo) return;
+        try {
+          const res = await Mousing.api("/api/watches");
+          if (res.status === 401 || res.status === 503) {
+            this.needsKey = true;
+            return;
+          }
+          const data = await res.json();
+          this.watches = (data.watches || []).filter((w) => w.type === "lightning_lane");
+        } catch (e) {
+          this.error = "Could not load your alerts.";
+        }
+      },
+
+      startEdit(watch) {
+        this.draft = {
+          id: watch?.id || null,
+          name: watch?.name || "",
+          attractions: watch ? [...(watch.attractions?.length ? watch.attractions : [DEFAULT_ATTRACTION])] : [],
+          windowStart: watch?.time_window?.start || "",
+          windowEnd: watch?.time_window?.end || "",
+          dateStart: watch?.date_range?.start || "",
+          dateEnd: watch?.date_range?.end || "",
+          interval: watch?.check_interval_minutes || 5,
+        };
+        this.timePresets = LightningLaneForm.timePresets();
+        this.datePresets = LightningLaneForm.datePresets();
+        this.timeOptions = LightningLaneForm.timeSlots(this.draft.windowStart, this.draft.windowEnd);
+        const firstPark = this.statusFor(this.draft.attractions[0]).parkName;
+        if (firstPark) this.activePark = firstPark;
+        if (this.draft.attractions.length) this.showPassFor(this.draft.attractions[0]);
+      },
+
+      presetClass(active) {
+        return active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300";
+      },
+
+      syncDates(edited) {
+        const { start, end } = LightningLaneForm.syncDateRange(this.draft.dateStart, this.draft.dateEnd, edited);
+        this.draft.dateStart = start;
+        this.draft.dateEnd = end;
+      },
+
+      syncTimes(edited) {
+        const { start, end } = LightningLaneForm.syncTimeWindow(this.draft.windowStart, this.draft.windowEnd, edited);
+        this.draft.windowStart = start;
+        this.draft.windowEnd = end;
+      },
+
+      toggleAttraction(name) {
+        const list = this.draft.attractions;
+        const i = list.indexOf(name);
+        if (i >= 0) list.splice(i, 1);
+        else list.push(name);
+      },
+
+      async putWatch(id, body) {
+        const res = id
+          ? await Mousing.api(`/api/watches/${id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+          : await Mousing.api("/api/watches", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "lightning_lane", ...body }),
+            });
+        if (!res.ok) throw new Error("Could not save the alert. Try again.");
+        const saved = (await res.json()).watch;
+        const i = this.watches.findIndex((w) => w.id === saved.id);
+        if (i >= 0) this.watches.splice(i, 1, saved);
+        else this.watches.push(saved);
+      },
+
+      async saveDraft() {
+        const d = this.draft;
+        this.saving = true;
+        this.error = null;
+        try {
+          await this.putWatch(d.id, {
+            name: d.name.trim() || this.defaultName(d.attractions),
+            attractions: [...d.attractions],
+            time_window: d.windowStart || d.windowEnd ? { start: d.windowStart || null, end: d.windowEnd || null } : null,
+            date_range: d.dateStart && d.dateEnd ? { start: d.dateStart, end: d.dateEnd } : null,
+            check_interval_minutes: d.interval,
+          });
+          this.draft = null;
+        } catch (e) {
+          this.error = e.message;
+        } finally {
+          this.saving = false;
+        }
+      },
+
+      async toggleWatch(watch) {
+        this.saving = true;
+        try {
+          await this.putWatch(watch.id, { enabled: !watch.enabled });
+        } catch (e) {
+          this.error = e.message;
+        } finally {
+          this.saving = false;
+        }
+      },
+
+      async deleteWatch(watch) {
+        if (!confirm(`Delete "${watch.name}"?`)) return;
+        try {
+          const res = await Mousing.api(`/api/watches/${watch.id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Could not delete the alert. Try again.");
+          this.watches = this.watches.filter((w) => w.id !== watch.id);
+        } catch (e) {
+          this.error = e.message;
+        }
+      },
+    }));
+  });
+  </script>
+
+</body>
+</html>
