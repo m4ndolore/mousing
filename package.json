@@ -1,0 +1,35 @@
+{
+  "name": "mousing",
+  "version": "0.1.0",
+  "description": "Live Lightning Lane return times, park crowd trends and seasonal hunts for Walt Disney World, on Cloudflare's free plan.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check:pages": "node scripts/check-pages.mjs",
+    "check:build": "wrangler pages functions build --outdir .wrangler/ci/functions && cd src/cron && wrangler deploy --dry-run --config wrangler.example.toml --outdir ../../.wrangler/ci/cron",
+    "check": "npm test && npm run check:pages && npm run check:build",
+    "dev": "wrangler pages dev src/pages --kv KV",
+    "deploy": "wrangler pages deploy",
+    "deploy:cron": "cd src/cron && wrangler deploy",
+    "baseline:build": "python3 scripts/build-baseline.py",
+    "baseline:load": "cd src/cron && wrangler kv key put parks:baseline --path ../../data/park_baseline.json --binding KV --remote"
+  },
+  "keywords": [
+    "walt-disney-world",
+    "lightning-lane",
+    "cloudflare-pages",
+    "pwa"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.86.0"
+  },
+  "dependencies": {
+    "@pushforge/builder": "^2.0.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m4ndolore/mousing.git"
+  }
+}

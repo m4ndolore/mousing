@@ -1,0 +1,32 @@
+# Copy to wrangler.toml and use the same KV namespace ID as the Pages project.
+name = "mousing-watcher"
+main = "watcher.js"
+compatibility_date = "2024-09-23"
+
+[triggers]
+# Every minute so alerts can poll at 1 or 2 minutes; each alert still runs only
+# when its own interval is due. A demo needs only "*/15 * * * *".
+crons = ["* * * * *"]
+
+[vars]
+DEMO_MODE = "false"
+# Your deployment's address, used for links in alerts.
+APP_URL = "https://mousing.<your-project>.pages.dev"
+# Optional. RopeDrop Planner asks API users to identify themselves with a
+# contact address; setting one turns on the weekly baseline refresh.
+# ROPEDROP_CONTACT = "you@example.com"
+# Optional. Sender for email alerts; needs the send_email binding below.
+# EMAIL_FROM = "mousing <alerts@your-domain.com>"
+# Secrets, set with `wrangler secret put <NAME>`:
+#   AUTH_SHARED_SECRET  same value as on the Pages project
+#   VAPID_PRIVATE_JWK   for push notifications
+#   VAPID_SUBJECT       mailto: or https: contact for push services
+
+[[kv_namespaces]]
+binding = "KV"
+id = "<your KV namespace id>"
+
+# Optional email alerts through Cloudflare Email Routing.
+# [[send_email]]
+# name = "SEND_EMAIL"
+# remote = true
