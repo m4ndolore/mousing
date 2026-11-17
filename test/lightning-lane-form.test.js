@@ -107,8 +107,29 @@ const closed = ride("Delta", { status: "CLOSED", state: "AVAILABLE", returnStart
 const full = ride("Echo", { state: "TEMP_FULL", standbyWait: 20 });
 const RIDES = [soldOut, later, sooner, closed, full];
 
-test("next available puts the soonest first and sold out and closed last", () => {
-  assert.deepEqual(names(LightningLaneForm.sortRides(RIDES, "next")), ["Charlie", "Bravo", "Echo", "Alpha", "Delta"]);
+test("next available puts the soonest bookable first, even before its ride opens", () => {
+  const closedSoldOut = ride("Foxtrot", { status: "CLOSED", state: "FINISHED" });
+  assert.deepEqual(
+    names(LightningLaneForm.sortRides([...RIDES, closedSoldOut], "next")),
+    ["Delta", "Charlie", "Bravo", "Echo", "Alpha", "Foxtrot"],
+  );
+});
+
+test("a return time shows even while the ride is closed or down", () => {
+  const time = (iso) => iso.slice(11, 16);
+  const window = { state: "AVAILABLE", returnStart: "2026-11-17T09:55:00-05:00", returnEnd: "2026-11-17T10:55:00-05:00" };
+  assert.equal(LightningLaneForm.statusLabel({ ...window, status: "CLOSED" }, time), "09:55 – 10:55");
+  assert.equal(LightningLaneForm.statusLabel({ ...window, status: "DOWN" }, time), "09:55 – 10:55");
+  assert.equal(LightningLaneForm.rideDetail({ ...window, status: "CLOSED", paid: false }), "Ride closed now");
+  assert.equal(LightningLaneForm.rideDetail({ ...window, status: "DOWN", paid: false }), "Ride down now");
+  assert.equal(LightningLaneForm.rideDetail({ ...window, status: "OPERATING", paid: false }), "");
+});
+
+test("a closed or down ride with nothing to book says so", () => {
+  assert.equal(LightningLaneForm.statusLabel({ status: "CLOSED", state: "FINISHED" }, String), "Closed");
+  assert.equal(LightningLaneForm.statusLabel({ status: "DOWN", state: "TEMP_FULL" }, String), "Down");
+  assert.equal(LightningLaneForm.statusLabel({ status: "OPERATING", state: "FINISHED" }, String), "Sold out");
+  assert.equal(LightningLaneForm.statusLabel({ status: "OPERATING", state: "AVAILABLE" }, String), "");
 });
 
 test("rides sort by name", () => {

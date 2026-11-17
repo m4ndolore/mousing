@@ -96,8 +96,27 @@
     return [...groups.keys()].sort().map((park) => ({ park, rides: groups.get(park) }));
   }
 
+  // Disney sells return times before a ride opens and while it is down, so a
+  // bookable Lightning Lane outranks the ride's current status.
+  function isBookable(ride) {
+    return ride.state === "AVAILABLE" && Boolean(ride.returnStart);
+  }
+
+  // The headline for a ride: its return window, or why there isn't one.
+  // Empty when the feed says nothing useful.
+  function statusLabel(ride, formatTime) {
+    if (isBookable(ride)) {
+      return formatTime(ride.returnStart) + (ride.returnEnd ? " – " + formatTime(ride.returnEnd) : "");
+    }
+    if (ride.status && ride.status !== "OPERATING") return ride.status === "DOWN" ? "Down" : "Closed";
+    return { TEMP_FULL: "Temporarily full", FINISHED: "Sold out" }[ride.state] || "";
+  }
+
   function rideDetail(ride) {
     const parts = [];
+    if (isBookable(ride) && ride.status && ride.status !== "OPERATING") {
+      parts.push(ride.status === "DOWN" ? "Ride down now" : "Ride closed now");
+    }
     if (ride.standbyWait != null) {
       parts.push("Standby " + ride.standbyWait + " min" + (ride.usualWait != null ? ", usually " + ride.usualWait : ""));
     }
@@ -112,8 +131,9 @@
   const NOT_OPERATING_RANK = 4;
 
   function availabilityRank(ride) {
+    if (isBookable(ride)) return STATE_RANK.AVAILABLE;
     if (ride.status && ride.status !== "OPERATING") return NOT_OPERATING_RANK;
-    if (ride.state === "AVAILABLE" && !ride.returnStart) return NO_DATA_RANK;
+    if (ride.state === "AVAILABLE") return NO_DATA_RANK;
     return STATE_RANK[ride.state] ?? NO_DATA_RANK;
   }
 
@@ -143,6 +163,7 @@
     filterByPass,
     dashboardGroups,
     rideDetail,
+    statusLabel,
     syncDateRange,
     syncTimeWindow,
     timeSlots,
