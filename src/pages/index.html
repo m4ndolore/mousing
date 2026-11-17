@@ -637,12 +637,8 @@
       },
 
       statusText(name) {
-        const a = this.statusFor(name);
-        if (a.status && a.status !== "OPERATING") return a.status === "DOWN" ? "Down" : "Closed";
-        if (a.state === "AVAILABLE" && a.returnStart) {
-          return this.formatTime(a.returnStart) + (a.returnEnd ? " – " + this.formatTime(a.returnEnd) : "");
-        }
-        return { TEMP_FULL: "Temporarily full", FINISHED: "Sold out" }[a.state] || (this.attractions.length ? "No data" : "—");
+        return LightningLaneForm.statusLabel(this.statusFor(name), (iso) => this.formatTime(iso))
+          || (this.attractions.length ? "No data" : "—");
       },
 
       watchSummary(w) {
